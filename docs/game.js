@@ -137,14 +137,22 @@ function blockedAt(c, r, dir) {
 }
 
 // Distance from entity to the next tile center along its direction.
+// The next center is the nearest half-integer coordinate strictly ahead
+// (EPS past the current position), so a step can never straddle a center
+// without landing on it — every decision point is visited exactly once.
 function centerAhead(e) {
-  let tx, ty;
-  if (e.dir.x > 0)      { tx = Math.floor(e.x) + 1.5;     ty = Math.round(e.y - 0.5) + 0.5; }
-  else if (e.dir.x < 0) { tx = Math.ceil(e.x) - 1.5;      ty = Math.round(e.y - 0.5) + 0.5; }
-  else if (e.dir.y > 0) { ty = Math.floor(e.y) + 1.5;     tx = Math.round(e.x - 0.5) + 0.5; }
-  else if (e.dir.y < 0) { ty = Math.ceil(e.y) - 1.5;      tx = Math.round(e.x - 0.5) + 0.5; }
+  const EPS = 1e-6;
+  let tx = e.x, ty = e.y;
+  if (e.dir.x > 0)      tx = Math.floor(e.x - 0.5 + EPS) + 1.5;
+  else if (e.dir.x < 0) tx = Math.ceil(e.x - 0.5 - EPS) - 0.5;
+  else if (e.dir.y > 0) ty = Math.floor(e.y - 0.5 + EPS) + 1.5;
+  else if (e.dir.y < 0) ty = Math.ceil(e.y - 0.5 - EPS) - 0.5;
   else return { x: e.x, y: e.y, dist: 0 };
-  return { x: tx, y: ty, dist: Math.abs(tx - e.x) + Math.abs(ty - e.y) };
+  // perpendicular axis always rests on a tile center; snap for safety
+  if (e.dir.x !== 0) ty = Math.round(e.y - 0.5) + 0.5;
+  else tx = Math.round(e.x - 0.5) + 0.5;
+  const dist = Math.abs(tx - e.x) + Math.abs(ty - e.y);
+  return { x: tx, y: ty, dist };
 }
 
 function stepEntity(e, speed, dt, onCenter) {
@@ -553,11 +561,12 @@ function draw() {
 // ----------------------------------------------------------------- DOM ----
 
 function showOverlay(title, sub) {
+  if (!overlayEl) return;
   ovTitle.textContent = title;
   ovSub.textContent = sub || '';
   overlayEl.classList.remove('hidden');
 }
-function hideOverlay() { overlayEl.classList.add('hidden'); }
+function hideOverlay() { if (overlayEl) overlayEl.classList.add('hidden'); }
 
 function setState(s) {
   state = s;
@@ -569,7 +578,7 @@ function setState(s) {
 }
 
 function refreshHud() {
-  if (typeof document === 'undefined') return;
+  if (typeof document === 'undefined' || !document.getElementById('score')) return;
   document.getElementById('score').textContent = score;
   document.getElementById('hiscore').textContent = hiScore;
   document.getElementById('level').textContent = level;
@@ -643,6 +652,14 @@ if (typeof module !== 'undefined' && module.exports) {
     tileChar, isWall, parsePellets, tileOf, centerAhead, blockedAt,
     ghostTarget, DIRS, makeGhosts,
     setMode: (m) => { mode = m; },
+    // headless simulation hooks (used by node tests only)
+    update, stepEntity, die, startGame, setState, resetPositions, newLevel,
+    checkCollisions, pacOnCenter, moveGhost,
+    getState: () => state,
+    getScore: () => score,
+    getLives: () => lives,
+    getPac: () => pac,
+    getGhosts: () => ghosts,
     _state: () => ({ pac, ghosts, get score() { return score; } }),
   };
 }
